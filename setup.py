@@ -17,5 +17,6 @@ setup(
     version=__version__,
     packages=find_packages(),
     include_package_data=True,
+    install_requires=requirements,
     entry_points=ENTRY_POINTS,
 )
