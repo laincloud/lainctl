@@ -9,17 +9,16 @@ from lain_admin_cli.cluster import Cluster
 from lain_admin_cli.auth import Auth
 from lain_admin_cli.drift import drift
 from lain_admin_cli.bootstrap import bootstrap
-from lain_admin_cli.rebuild_deployd import rebuild_deployd
 
 logging.getLogger("requests").setLevel(logging.WARNING)
 logging.getLogger("docker").setLevel(logging.WARNING)
 
 one_level_commands = [
-    version, drift, bootstrap, rebuild_deployd
+    version, drift
 ]
 
 two_level_commands = [
-        Node, Config, Cluster, Auth
+        Node, Cluster, Auth
 ]
 
 def main():
