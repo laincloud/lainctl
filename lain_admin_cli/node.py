@@ -234,6 +234,7 @@ def run_addnode_ansible(args, access_token):
         'target': 'new_nodes',
         'allow_restart_docker': 'yes',
         'access_token': access_token,
+        'adding_node_mode': 'yes'  # this ensures the removal of existing key.json
     }
     if args.docker_device:
         envs['docker_device'] = args.docker_device
