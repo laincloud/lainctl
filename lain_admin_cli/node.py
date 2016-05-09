@@ -4,7 +4,7 @@ from argh import CommandError
 from argh.decorators import arg, expects_obj
 from lain_admin_cli.helpers import Node as NodeInfo
 from lain_admin_cli.helpers import (
-    yes_or_no, info, warn, error, RemoveException, AddNodeException, _yellow,
+    yes_or_no, info, error, RemoveException, AddNodeException, _yellow,
     TwoLevelCommandBase, run_ansible_cmd, sso_login
 )
 from subprocess import check_output, check_call, STDOUT
@@ -47,7 +47,7 @@ class Node(TwoLevelCommandBase):
     @classmethod
     def list(self):
         """list all the nodes(name and ip) in lain"""
-        output = check_output(['etcdctl', 'ls', '/lain/nodes/nodes'])
+        check_output(['etcdctl', 'ls', '/lain/nodes/nodes'])
         nodes = self.__list_node_group('nodes')
         print "%-10sIP" % "NODENAME"
         for node in nodes.values():
@@ -60,7 +60,7 @@ class Node(TwoLevelCommandBase):
         inspect a node, nodename or nodeip should be given.
         info is got from etcd.
         """
-        output = check_output(['etcdctl', 'ls', '/lain/nodes/nodes'])
+        check_output(['etcdctl', 'ls', '/lain/nodes/nodes'])
         all_nodes = self.__list_node_group('nodes')
         for item in all_nodes.values():
             if node == item.name or node == item.ip:
@@ -86,10 +86,10 @@ class Node(TwoLevelCommandBase):
     @arg('-P', '--ssh-port', default=22, help="SSH port of the node to be added")
     @arg('-d', '--docker-device', default="", help="The block device use for docker's devicemapper storage."
         "docker will run on loop-lvm if this is not given, which is not proposed")
-    @arg('-c', '--cid', default='11', help="Client id get from the sso system.")
-    @arg('-s', '--secret', default='cR8wLnzVJFl_N2-eNHxFkA', help="Client secret get from the sso system.")
-    @arg('-r', '--redirect-uri', default='https://sso.yxapp.in/', help="Redirect uri get from the sso system.")
-    @arg('-u', '--sso-url', default='https://sso.yxapp.in', help="The sso_url need to be process")
+    @arg('-c', '--cid', default='3', help="Client id get from the sso system.")
+    @arg('-s', '--secret', default='lain-cli_admin', help="Client secret get from the sso system.")
+    @arg('-r', '--redirect_uri', default='https://example.com/', help="Redirect uri get from the sso system.")
+    @arg('-u', '--sso_url', default='https://sso.lain.local', help="The sso_url need to be process")
     @arg('-q', '--quiet', default=False, help="If in quiet mode, don't need login")
     def add(self, args):
         """add a new node to lain"""

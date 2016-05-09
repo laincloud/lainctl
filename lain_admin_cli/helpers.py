@@ -138,13 +138,13 @@ class SSOAccess(object):
     @classmethod
     def new(cls, sso_url=None, cid=None, secret=None, redirect_uri=None):
         if sso_url is None:
-            sso_url = 'https://sso.yxapp.in'
+            sso_url = 'https://sso.lain.local'
         if cid is None:
-            cid = 11
+            cid = 3
         if secret is None:
-            secret = 'cR8wLnzVJFl_N2-eNHxFkA'
+            secret = 'lain-cli_admin'
         if redirect_uri is None:
-            redirect_uri = 'https://sso.yxapp.in/'
+            redirect_uri = 'https://example.com'
 
         return SSOAccess(sso_url, cid, secret, redirect_uri)
 
