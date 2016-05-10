@@ -129,15 +129,6 @@ def drift_container(from_node, container, to_node, playbooks_path, with_volume, 
         if not yes_or_no("Make sure %s exist on %s" % (container.info['Config']['Image'], to_node.name),
                          default='no', color=_yellow):
             return
-    elif container.appname == 'registry':
-        output = 'false'
-        try:
-            output = check_output(['etcdctl', 'get', '/lain/config/registry_on_moosefs'], stderr=STDOUT).lower()
-        except CalledProcessError:
-            pass
-        if output != 'true':
-            warn("Registry is not running on moosefs, can not drift it")
-            return
 
     url = "http://deployd.lain:9003/api/nodes?cmd=drift&from=%s&pg=%s&pg_instance=%s" % (
         from_node.name, container.podname, container.instance
