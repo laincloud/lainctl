@@ -12,9 +12,6 @@ from subprocess import check_output, call
 from lain_admin_cli.helpers import info, error, sso_login
 
 
-AUTH_CHOICES = ['console', 'registry', 'all']
-
-
 class Auth(TwoLevelCommandBase):
 
     @classmethod
@@ -34,7 +31,7 @@ class Auth(TwoLevelCommandBase):
     @arg('-c', '--cid', default='3', help="Client id get from the sso system.")
     @arg('-s', '--secret', default='lain-cli_admin', help="Client secret get from the sso system.")
     @arg('-r', '--redirect_uri', default='https://example.com/', help="Redirect uri get from the sso system.")
-    @arg('-u', '--sso_url', default='https://sso.lain.local', help="The sso_url need to be process")
+    @arg('-u', '--sso_url', default='http://sso.lain.local', help="The sso_url need to be process")
     @arg('-a', '--check_all', default='False', help="Whether check all apps to create app groups in sso")
     def init(self, args):
         '''
@@ -50,10 +47,10 @@ class Auth(TwoLevelCommandBase):
 
     @classmethod
     @expects_obj
-    @arg('-s', '--scope', default='all', choices=AUTH_CHOICES)
+    @arg('-s', '--scope', default='all', choices=['console', 'all'])
     @arg('-t', '--type', default='lain-sso', help='The auth type for console')
     @arg('-u', '--url', default='http://sso.lain.local', help='the auth url for console')
-    @arg('-r', '--realm', default='http://console.lain.local/api/v1/authorize/registry',
+    @arg('-r', '--realm', default='http://console.lain.local/api/v1/authorize/registry/',
          help='the realm in which the registry server authenticates')
     @arg('-i', '--issuer', default='auth server', help='the name of registry token issuer')
     @arg('-d', '--domain', default='lain.local', help='the domain where registry located')
@@ -71,7 +68,7 @@ class Auth(TwoLevelCommandBase):
 
     @classmethod
     @expects_obj
-    @arg('-s', '--scope', default='all', choices=AUTH_CHOICES)
+    @arg('-s', '--scope', default='all', choices=['registry', 'all'])
     def close(self, args):
         '''
         close the auth of lain
@@ -112,7 +109,7 @@ def add_sso_groups(sso_url, token, check_all):
                 print("create sso group for app %s wrong: %s" %(app, result.encode('utf8')))
             time.sleep(3)
         except Exception as e:
-            print("create sso group for app %s wrong: %s" %(app, str(e)))
+            print("create sso group for app %s wrong: %s" %(app, e))
 
 
 def get_console_apps(token):

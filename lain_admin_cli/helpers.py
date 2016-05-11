@@ -159,6 +159,8 @@ class SSOAccess(object):
             authentication = parse_qs(urlparse(code_callback_url).query)
             return True, authentication['code'][0]
         except Exception:
+            warn("Please insure '%s' is accessable.", self.auth_url)
+            warn("If not, please specify the sso cid and secret when login.")
             return False, ''
 
     def get_auth_token(self, code):
