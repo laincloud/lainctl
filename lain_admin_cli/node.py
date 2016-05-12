@@ -144,7 +144,7 @@ class Node(TwoLevelCommandBase):
                 raise AddNodeException("There are duplicate node IPs")
 
             if os.getuid() != 0:
-                raise AddNodeException("Nedd run add-node script with root privilege please.")
+                raise AddNodeException("Need run add-node script with root privilege please.")
 
             duplicates = self.__check_existing(nodes)
             if duplicates:
