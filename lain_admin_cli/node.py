@@ -49,9 +49,13 @@ class Node(TwoLevelCommandBase):
         """list all the nodes(name and ip) in lain"""
         check_output(['etcdctl', 'ls', '/lain/nodes/nodes'])
         nodes = self.__list_node_group('nodes')
-        print "%-10sIP" % "NODENAME"
+
+        # The column margin is 2 spaces
+        min_width = 2 + max(8, *(len(node.name) for node in nodes.values()))
+        row_fmt = "%-{min_width}s%s".format(min_width=min_width)
+        print row_fmt % ("NODENAME", "IP")
         for node in nodes.values():
-            print "%-10s%s" % (node.name, node.ip)
+            print row_fmt % (node.name, node.ip)
 
     @classmethod
     @arg('node')
