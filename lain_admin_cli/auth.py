@@ -185,17 +185,11 @@ def close_registry_auth():
 def __restart_registry():
     info("restarting registry...")
     try:
-
         container_id = check_output(['docker', '-H', ':2376', 'ps', '-qf', 'name=registry.web.web']).strip()
-
         info("container id of registry is : %s" % container_id)
-
         check_output(['docker', '-H', ':2376', 'stop', container_id])
-
         time.sleep(3)
-
         check_output(['docker', '-H', ':2376', 'start', container_id])
-
     except Exception as e:
         error("restart registry failed : %s, please try again or restart it manually." % str(e))
 
