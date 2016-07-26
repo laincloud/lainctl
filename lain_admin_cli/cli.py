@@ -7,7 +7,7 @@ from lain_admin_cli.node import Node
 from lain_admin_cli.config import Config
 from lain_admin_cli.cluster import Cluster
 from lain_admin_cli.auth import Auth
-from lain_admin_cli.auth import Network
+from lain_admin_cli.network import Network
 from lain_admin_cli.drift import drift
 from lain_admin_cli.bootstrap import bootstrap
 
