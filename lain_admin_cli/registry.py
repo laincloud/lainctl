@@ -5,12 +5,12 @@ import httplib
 import json
 import time
 
-from lain_admin_cli.helpers import (
-    TwoLevelCommandBase, info, error
-)
 from argh.decorators import arg
 from argh import CommandError
 from subprocess import check_output
+from lain_admin_cli.helpers import (
+    TwoLevelCommandBase, info, error
+)
 
 REPOS_URL_TEMPLATE = "http://%s/v2/_catalog"
 TAGS_URL_TEMPLATE = "http://%s/v2/%s/tags/list"
@@ -34,7 +34,7 @@ TIME_OUT = 5
 
 def _domain():
     try:
-        return check_output(['etcdctl', 'get', '/lain/config/domain'])
+        return check_output(['etcdctl', 'get', '/lain/config/domain']).strip('\n')
     except Exception as e:
         error(str(e))
 
@@ -187,13 +187,13 @@ def expired_repo_clear(session, repo, repo_remain):
             elif image.tag.startswith(RELEASE):
                 rels_images_map[timestamp] = image
             elif image.tag.startswith(PREPARE):
-                timestamp = int(tags_info[pos_timestamp+1])
+                timestamp = int(tags_info[pos_timestamp + 1])
                 prep_images_map[timestamp] = image
 
         prep_images = sort_map_values(prep_images_map)
         meta_images = sort_map_values(meta_images_map)
         rels_images = sort_map_values(rels_images_map)
-        
+
         for image in prep_images[repo_remain:]:
             info("deleting image: %s", image)
             _image_delete(session, image)
@@ -244,6 +244,7 @@ class Registry(TwoLevelCommandBase):
     @arg('-t', '--target', required=False, help="target repository in registry")
     def list(self, target="all"):
         session = requests.Session()
+        self._update_domain()
         if target == "all":
             repos = _repos_in_registry(session)
             for repo in repos:
@@ -258,13 +259,17 @@ class Registry(TwoLevelCommandBase):
     @arg('-n', '--num', required=False, help="repository's remained quantity of images in registry(must bigger than 0)")
     def clean(self, num=10, target="all"):
         session = requests.Session()
-        domain = _domain()
-        if domain is not None:
-            global registry_host
-            registry_host = REGISTRY_FORMAT % _domain()
+        self._update_domain()
         if num < 1:
             raise CommandError("num must bigger than 0")
         if target == "all":
             expired_all_repos_clear(session, num)
         else:
             expired_repo_clear(session, target, num)
+
+    @classmethod
+    def _update_domain(self):
+        domain = _domain()
+        if domain is not None:
+            global registry_host
+            registry_host = REGISTRY_FORMAT % _domain()
