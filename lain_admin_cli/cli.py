@@ -9,6 +9,7 @@ from lain_admin_cli.cluster import Cluster
 from lain_admin_cli.auth import Auth
 from lain_admin_cli.network import Network
 from lain_admin_cli.drift import drift
+from lain_admin_cli.registry import Registry
 from lain_admin_cli.bootstrap import bootstrap
 
 logging.getLogger("requests").setLevel(logging.WARNING)
@@ -19,14 +20,16 @@ one_level_commands = [
 ]
 
 two_level_commands = [
-        Node, Cluster, Auth, Network
+    Node, Cluster, Auth, Network, Registry
 ]
+
 
 def main():
     parser = argh.ArghParser()
     parser.add_commands(one_level_commands)
     for command in two_level_commands:
-        argh.add_commands(parser, command.subcommands(), namespace=command.namespace(), help=command.help_message())
+        argh.add_commands(parser, command.subcommands(),
+                          namespace=command.namespace(), help=command.help_message())
     parser.dispatch()
 
 
