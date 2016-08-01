@@ -53,7 +53,6 @@ class Auth(TwoLevelCommandBase):
     @arg('-r', '--realm', default='http://console.lain.local/api/v1/authorize/registry/',
          help='the realm in which the registry server authenticates')
     @arg('-i', '--issuer', default='auth server', help='the name of registry token issuer')
-    @arg('-d', '--domain', default='lain.local', help='the domain where registry located')
     def open(self, args):
         '''
         open the auth of lain
@@ -165,8 +164,8 @@ def close_console_auth():
 
 def open_registry_auth(args):
     info("opening registry auth...")
-    auth_setting = '{"realm": "%s", "issuer": "%s", "service": "%s"}' % (
-        args.realm, args.issuer, args.domain)
+    auth_setting = '{"realm": "%s", "issuer": "%s", "service": "lain.local"}' % (
+        args.realm, args.issuer)
 
     check_output(['etcdctl', 'set',
                   '/lain/config/auth/registry',
