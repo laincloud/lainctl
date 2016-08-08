@@ -152,6 +152,10 @@ def drift_container(from_node, container, to_node, playbooks_path, with_volume, 
     url += "&force=true" if with_volume or ignore_volume else ""
     url += "&to=%s" % to_node.name if to_node else ""
 
+    ## Warm-up on target node
+    info("Warm-up on target node...")
+    warm_up_on_target(playbooks_path, [container], from_node, to_node)
+
     ## Drift volumes
     if with_volume and len(container.volumes) > 0:
         info("Drift the volume...")
@@ -167,10 +171,6 @@ def drift_container(from_node, container, to_node, playbooks_path, with_volume, 
 
         info("Drift the volume again...")
         drift_volumes(playbooks_path, [container], from_node, to_node)
-
-    ## Warm-up on target node
-    info("Warm-up on target node...")
-    warm_up_on_target(playbooks_path, [container], from_node, to_node)
 
     ## Call deployd api
     info("PATCH %s" % url)
