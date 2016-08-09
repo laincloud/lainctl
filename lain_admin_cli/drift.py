@@ -123,8 +123,6 @@ def warm_up_on_target(playbooks_path, containers, source, target):
     cmd = ['ansible-playbook', '-i', os.path.join(playbooks_path, 'cluster')]
     cmd += ['-e', 'target=nodes']
     cmd += ['-e', 'target_node=%s' % target.name]
-    cmd += ['-e', 'from_node=%s' % source.name]
-    cmd += ['-e', 'from_ip=%s' % source.ip]
     cmd += ['-e', 'role=drift-warm-up']
     cmd += ['-e', 'to_drift_images=%s' % to_drift_images]
     cmd += [os.path.join(playbooks_path, 'role.yaml')]
