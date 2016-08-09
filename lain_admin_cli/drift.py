@@ -116,7 +116,7 @@ def drift_volumes(playbooks_path, containers, source, target):
     os.remove(var_file)
 
 
-def warm_up_on_target(playbooks_path, containers, source, target):
+def warm_up_on_target(playbooks_path, containers, target):
     to_drift_images = reduce(lambda x, y: x + [y.info['Config']['Image']],
                              containers, [])
 
@@ -152,7 +152,7 @@ def drift_container(from_node, container, to_node, playbooks_path, with_volume, 
 
     ## Warm-up on target node
     info("Warm-up on target node...")
-    warm_up_on_target(playbooks_path, [container], from_node, to_node)
+    warm_up_on_target(playbooks_path, [container], to_node)
 
     ## Drift volumes
     if with_volume and len(container.volumes) > 0:
