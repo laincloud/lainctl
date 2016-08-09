@@ -1,3 +1,5 @@
 *.pyc
 lain_admin_cli.egg-info
 *DS_Store
+build/
+dist/

@@ -2,8 +2,8 @@
 
 from argh.decorators import arg
 from lain_admin_cli.helpers import Node, Container, is_backupd_enabled
-from lain_admin_cli.helpers import yes_or_no, info, error, warn, _yellow, get_domain, volume_dir
-from subprocess import check_output, check_call, CalledProcessError, STDOUT
+from lain_admin_cli.helpers import yes_or_no, info, error, warn, _yellow, volume_dir
+from subprocess import check_output, check_call, CalledProcessError
 import requests, os, json, time
 
 
@@ -44,7 +44,7 @@ def drift(containers, with_volume=False, ignore_volume=False, playbooks="", targ
 
         node = Node(container.host)
         drift_container(node, container, target, playbooks, with_volume, ignore_volume)
-        if len(c.volumes) > 0 and is_backupd_enabled():
+        if len(container.volumes) > 0 and is_backupd_enabled():
             fix_backupd(container, node, target)
 
 
@@ -116,6 +116,20 @@ def drift_volumes(playbooks_path, containers, source, target):
     os.remove(var_file)
 
 
+def warm_up_on_target(playbooks_path, containers, source, target):
+    to_drift_images = reduce(lambda x, y: x + [y.info['Config']['Image']],
+                             containers, [])
+
+    cmd = ['ansible-playbook', '-i', os.path.join(playbooks_path, 'cluster')]
+    cmd += ['-e', 'target=nodes']
+    cmd += ['-e', 'target_node=%s' % target.name]
+    cmd += ['-e', 'role=drift-warm-up']
+    cmd += ['-e', 'to_drift_images=%s' % to_drift_images]
+    cmd += [os.path.join(playbooks_path, 'role.yaml')]
+    info('cmd is: %s', ' '.join(cmd))
+    check_call(cmd)
+
+
 def drift_container(from_node, container, to_node, playbooks_path, with_volume, ignore_volume):
     if container.appname == 'deploy':
         key = '/lain/deployd/pod_groups/deploy/deploy.web.web'
@@ -135,6 +149,10 @@ def drift_container(from_node, container, to_node, playbooks_path, with_volume, 
     )
     url += "&force=true" if with_volume or ignore_volume else ""
     url += "&to=%s" % to_node.name if to_node else ""
+
+    ## Warm-up on target node
+    info("Warm-up on target node...")
+    warm_up_on_target(playbooks_path, [container], from_node, to_node)
 
     ## Drift volumes
     if with_volume and len(container.volumes) > 0:
