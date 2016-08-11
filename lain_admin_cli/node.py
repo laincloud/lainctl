@@ -5,7 +5,7 @@ from argh.decorators import arg, expects_obj
 from lain_admin_cli.helpers import Node as NodeInfo
 from lain_admin_cli.helpers import (
     yes_or_no, info, error, RemoveException, AddNodeException, _yellow,
-    TwoLevelCommandBase, run_ansible_cmd, sso_login
+    TwoLevelCommandBase, run_ansible_cmd
 )
 from subprocess import check_output, check_call, STDOUT
 import signal
@@ -90,23 +90,8 @@ class Node(TwoLevelCommandBase):
     @arg('-P', '--ssh-port', default=22, help="SSH port of the node to be added")
     @arg('-d', '--docker-device', default="", help="The block device use for docker's devicemapper storage."
         "docker will run on loop-lvm if this is not given, which is not proposed")
-    @arg('-c', '--cid', default='3', help="Client id get from the sso system.")
-    @arg('-s', '--secret', default='lain-cli_admin', help="Client secret get from the sso system.")
-    @arg('-r', '--redirect_uri', default='https://example.com/', help="Redirect uri get from the sso system.")
-    @arg('-u', '--sso_url', default='https://sso.lain.local', help="The sso_url need to be process")
-    @arg('-q', '--quiet', default=False, help="If in quiet mode, don't need login")
     def add(self, args):
         """add a new node to lain"""
-        access_token = ''
-        if not args.quiet:
-            login_success, token = sso_login(args.sso_url, args.cid, args.secret, args.redirect_uri)
-            if login_success:
-                access_token = token
-                info("login success")
-            else:
-                error("login failed")
-                return
-
         try:
             nodes = dict()
             nodes = self.__check_nodes_validation(args.nodes)
@@ -118,7 +103,7 @@ class Node(TwoLevelCommandBase):
                             ip])
                 copy_public_key(ip)
 
-            if run_addnode_ansible(args, access_token):
+            if run_addnode_ansible(args):
                 error("run add node ansible failed")
                 return
 
@@ -233,11 +218,10 @@ class Node(TwoLevelCommandBase):
         health.run()
 
 
-def run_addnode_ansible(args, access_token):
+def run_addnode_ansible(args):
     envs = {
         'target': 'new_nodes',
         'allow_restart_docker': 'yes',
-        'access_token': access_token,
         'adding_node_mode': 'yes'  # this ensures the removal of existing key.json
     }
     if args.docker_device:
