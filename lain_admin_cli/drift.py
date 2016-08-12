@@ -150,9 +150,12 @@ def drift_container(from_node, container, to_node, playbooks_path, with_volume, 
     url += "&force=true" if with_volume or ignore_volume else ""
     url += "&to=%s" % to_node.name if to_node else ""
 
-    ## Warm-up on target node
-    info("Warm-up on target node...")
-    warm_up_on_target(playbooks_path, [container], to_node)
+    if to_node:
+        ## Warm-up on target node
+        info("Warm-up on target node...")
+        warm_up_on_target(playbooks_path, [container], to_node)
+    else:
+        info("No specified target node, skip warm-up...")
 
     ## Drift volumes
     if with_volume and len(container.volumes) > 0:
