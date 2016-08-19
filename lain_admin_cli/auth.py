@@ -131,6 +131,12 @@ def get_console_domain():
         etcd_authority = environ.get("CONSOLE_ETCD_HOST", "etcd.lain:4001")
         client = get_etcd_client(etcd_authority)
         domain = client.read("/lain/config/domain").value
+        try:
+            main_domain = json.loads(client.read("/lain/config/extra_domains").value)[0]
+        except Exception as e:
+            print("use %s as a default prefix of group name" % domain)
+        else:
+            domain = main_domain
         return domain
     except Exception:
         raise Exception("unable to get the console domain!")
