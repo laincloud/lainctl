@@ -32,11 +32,15 @@ SERVICE = "service"
 TIME_OUT = 5
 
 
+def _format_messages(msg):
+    msg.replace('%', '')
+
+
 def _domain():
     try:
         return check_output(['etcdctl', 'get', '/lain/config/domain']).strip('\n')
     except Exception as e:
-        error(str(e))
+        error(_format_messages(str(e)))
 
 
 def _request_auth(session, method, url, auth_head, **kwargs):
@@ -56,7 +60,7 @@ def _request_auth(session, method, url, auth_head, **kwargs):
                 method, url, headers=headers, timeout=TIME_OUT)
         return resp
     except Exception as e:
-        error(str(resp.message))
+        error(_format_messages(str(e)))
 
 
 def _request(session, method, url, **kwargs):
@@ -70,7 +74,7 @@ def _request(session, method, url, **kwargs):
                 resp = resp_auth
         return resp
     except Exception as e:
-        error(str(e.message))
+        error(_format_messages(str(e)))
 
 
 def _token(auth_head, expired=False):
@@ -82,7 +86,7 @@ def _token(auth_head, expired=False):
         resp = requests.get(token_url)
         token = resp.json().get('token')
     except Exception as e:
-        error(resp.text)
+        error(_format_messages(resp.text))
         return token
     if token is not None:
         TOKEN_CACHE[token_url] = token
@@ -154,7 +158,7 @@ def _images_in_repo(session, repo):
             images.append(Image(repo, tag, degist))
         return images
     except Exception as e:
-        error(e)
+        error(_format_messages(str(e)))
     return []
 
 
@@ -181,13 +185,17 @@ def expired_repo_clear(session, repo, repo_remain):
             tags_info = image.tag.split('-')
             if len(tags_info) != image_tag_split_len:
                 continue
-            timestamp = int(tags_info[pos_timestamp])
+
+            if image.tag.startswith(PREPARE):
+                timestamp = int(tags_info[pos_timestamp + 1])
+            else:
+                timestamp = int(tags_info[pos_timestamp])
+
             if image.tag.startswith(META):
                 meta_images_map[timestamp] = image
             elif image.tag.startswith(RELEASE):
                 rels_images_map[timestamp] = image
             elif image.tag.startswith(PREPARE):
-                timestamp = int(tags_info[pos_timestamp + 1])
                 prep_images_map[timestamp] = image
 
         prep_images = sort_map_values(prep_images_map)
