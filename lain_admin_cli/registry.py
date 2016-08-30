@@ -32,15 +32,11 @@ SERVICE = "service"
 TIME_OUT = 5
 
 
-def _format_messages(msg):
-    msg.replace('%', '')
-
-
 def _domain():
     try:
         return check_output(['etcdctl', 'get', '/lain/config/domain']).strip('\n')
     except Exception as e:
-        error(_format_messages(str(e)))
+        error('Get lain domain failed! error:%s', str(e))
 
 
 def _request_auth(session, method, url, auth_head, **kwargs):
@@ -51,6 +47,9 @@ def _request_auth(session, method, url, auth_head, **kwargs):
     headers.update(kwargs)
     try:
         resp = session.request(method, url, headers=headers, timeout=TIME_OUT)
+        if resp.status_code >= 300 or resp.status_code < 200:
+            error('Requests url(%s) failed! error: registry server faltal error', url)
+            return
         if resp.status_code == 401:
             token = _token(auth_head, expired=True)
             if token is None:
@@ -60,7 +59,7 @@ def _request_auth(session, method, url, auth_head, **kwargs):
                 method, url, headers=headers, timeout=TIME_OUT)
         return resp
     except Exception as e:
-        error(_format_messages(str(e)))
+        error('Requests url(%s) failed! error:%s', url, str(e))
 
 
 def _request(session, method, url, **kwargs):
@@ -72,9 +71,14 @@ def _request(session, method, url, **kwargs):
                 session, method, url, auth_head, **kwargs)
             if resp_auth is not None:
                 resp = resp_auth
+        if resp is None:
+            return
+        if resp.status_code >= 300 or resp.status_code < 200:
+            error('Requests url(%s) failed! error: registry server faltal error', url)
+            return
         return resp
     except Exception as e:
-        error(_format_messages(str(e)))
+        error('Requests url(%s) failed! error:%s', url, str(e))
 
 
 def _token(auth_head, expired=False):
@@ -86,7 +90,7 @@ def _token(auth_head, expired=False):
         resp = requests.get(token_url)
         token = resp.json().get('token')
     except Exception as e:
-        error(_format_messages(resp.text))
+        error('Fetch auth token failed ! error:%s', str(e))
         return token
     if token is not None:
         TOKEN_CACHE[token_url] = token
@@ -130,7 +134,7 @@ def _repos_in_registry(session):
     try:
         return resp.json().get(REPOSITORIES)
     except Exception as e:
-        error(str(e))
+        error('Fetch all repositories failed! error:%s', str(e))
     return []
 
 
@@ -158,7 +162,7 @@ def _images_in_repo(session, repo):
             images.append(Image(repo, tag, degist))
         return images
     except Exception as e:
-        error(_format_messages(str(e)))
+        error('Fetch repo(%s)\'s images failed! error:%s', repo, str(e))
     return []
 
 
@@ -166,12 +170,12 @@ def _image_delete(session, image):
     manifest_url = MANIFEST_URL_TEMPLATE % (
         registry_host, image.repo_name, image.digest)
     resp = _request(session, 'DELETE', manifest_url)
-    info("delete image:%s result:%s ", image, resp)
+    info("Delete image(%s) result:%s ", image, resp)
 
 
 def expired_repo_clear(session, repo, repo_remain):
     info('----------------------------')
-    info('start clean registry repo %s', repo)
+    info('Start clean registry repo %s', repo)
     try:
         image_tag_split_len = 3
         pos_timestamp = 1
@@ -203,22 +207,22 @@ def expired_repo_clear(session, repo, repo_remain):
         rels_images = sort_map_values(rels_images_map)
 
         for image in prep_images[repo_remain:]:
-            info("deleting image: %s", image)
+            info("Deleting image: %s", image)
             _image_delete(session, image)
         for image in meta_images[repo_remain:]:
-            info("deleting image: %s", image)
+            info("Deleting image: %s", image)
             _image_delete(session, image)
         for image in rels_images[repo_remain:]:
-            info("deleting image: %s", image)
+            info("Deleting image: %s", image)
             _image_delete(session, image)
     except Exception as e:
-        error(str(e))
+        error('Clean registry failed! error:%s', str(e))
     finally:
-        info('clean registry repo %s over', repo)
+        info('Clean registry repo %s over', repo)
 
 
 def expired_all_repos_clear(session, repo_remain):
-    info('start clean registry')
+    info('Start clean registry')
     info('============================')
     repos = _repos_in_registry(session)
     if not isinstance(repos, list) or len(repos) == 0:
@@ -226,7 +230,7 @@ def expired_all_repos_clear(session, repo_remain):
     for repo in repos:
         expired_repo_clear(session, repo, repo_remain)
     info('============================')
-    info('clean registry over')
+    info('Clean registry over')
 
 
 def sort_map_values(origin_map):
@@ -260,7 +264,7 @@ class Registry(TwoLevelCommandBase):
         else:
             images = _images_in_repo(session, target)
             for image in images:
-                info(str(image))
+                info('%s', image)
 
     @classmethod
     @arg('-t', '--target', required=False, help="clean target repository in registry")
