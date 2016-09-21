@@ -11,6 +11,7 @@ from lain_admin_cli.network import Network
 from lain_admin_cli.drift import drift
 from lain_admin_cli.registry import Registry
 from lain_admin_cli.bootstrap import bootstrap
+from lain_admin_cli.vault import Vault
 
 logging.getLogger("requests").setLevel(logging.WARNING)
 logging.getLogger("docker").setLevel(logging.WARNING)
@@ -20,7 +21,7 @@ one_level_commands = [
 ]
 
 two_level_commands = [
-    Node, Cluster, Auth, Network, Registry
+    Node, Cluster, Auth, Network, Registry, Vault
 ]
 
 
