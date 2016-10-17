@@ -50,7 +50,7 @@ class Auth(TwoLevelCommandBase):
     @arg('-s', '--scope', default='all', choices=['console', 'all'])
     @arg('-t', '--type', default='lain-sso', help='The auth type for console')
     @arg('-u', '--url', default='http://sso.lain.local', help='the auth url for console')
-    @arg('-r', '--realm', default='http://console.lain.local/api/v1/authorize/registry/',
+    @arg('-r', '--realm', default='http://console.%s/api/v1/authorize/registry/' % get_console_domain(),
          help='the realm in which the registry server authenticates')
     @arg('-i', '--issuer', default='auth server', help='the name of registry token issuer')
     def open(self, args):
