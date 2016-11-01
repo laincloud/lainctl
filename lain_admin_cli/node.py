@@ -8,9 +8,7 @@ from lain_admin_cli.helpers import (
     TwoLevelCommandBase, run_ansible_cmd
 )
 from subprocess import check_output, check_call, STDOUT
-import signal
-import json
-import os
+import requests, signal, json, os
 from lain_admin_cli.utils.health import NodeHealth
 
 def sigint_handler(signum, frame):
@@ -24,7 +22,7 @@ class Node(TwoLevelCommandBase):
 
     @classmethod
     def subcommands(self):
-        return [self.list, self.inspect, self.add, self.remove, self.clean, self.health]
+        return [self.list, self.inspect, self.add, self.remove, self.clean, self.maintain, self.health]
 
     @classmethod
     def namespace(self):
@@ -121,7 +119,6 @@ class Node(TwoLevelCommandBase):
             for name, ip in nodes:
                 check_call(['etcdctl', 'rm', '/lain/nodes/new/%s:%s:%s' % (name, ip, port)])
 
-
     @classmethod
     def __check_nodes_validation(self, nodes):
         try:
@@ -211,6 +208,29 @@ class Node(TwoLevelCommandBase):
                     stderr=STDOUT)
             run_cleannode_ansible(playbooks)
             check_output(['etcdctl', 'rm', '/lain/nodes/clean/%s' % key])
+
+    @classmethod
+    @arg('nodename')
+    @arg('-r', '--remove', help="whether removing deployment constraint on the specified node")
+    def maintain(self, nodename, remove=False):
+        """
+        maintain node will disable or enable deployment onto the maintained node.
+        """
+        node = NodeInfo(nodename)
+        base_url = "http://deployd.lain:9003/api/constraints"
+        operator = "Remove" if remove else "Add"
+        if not remove:
+            url = base_url + "?type=node&value=%s" % node.name
+            info("PATCH %s" % url)
+            resp = requests.patch(url)
+        else:
+            url = base_url + "?type=node&value=%s" % node.name
+            info("DELETE %s" % url)
+            resp = requests.delete(url)
+        if resp.status_code >= 300:
+            error("%s constraint on node %s fail: %s" % (operator, node.name, resp.text))
+        else:
+            info("%s constraint on node %s success." % (operator, node.name))
 
     @classmethod
     def health(cls):
