@@ -32,7 +32,7 @@ class Auth(TwoLevelCommandBase):
     @arg('-s', '--secret', default='lain-cli_admin', help="Client secret get from the sso system.")
     @arg('-r', '--redirect_uri', default='https://example.com/', help="Redirect uri get from the sso system.")
     @arg('-u', '--sso_url', default='http://sso.lain.local', help="The sso_url need to be process")
-    @arg('-a', '--check_all', default='False', help="Whether check all apps to create app groups in sso")
+    @arg('-a', '--check_all', default=False, help="Whether check all apps to create app groups in sso")
     def init(self, args):
         '''
         init the auth of lain, create groups in sso for lain apps
@@ -82,7 +82,7 @@ class Auth(TwoLevelCommandBase):
 
 
 def add_sso_groups(sso_url, token, check_all):
-    if check_all != 'True':
+    if not check_all:
         appnames = ['console', 'registry', 'tinydns', 'webrouter', 'lvault']
         get_apps_success = True
     else:
@@ -176,7 +176,7 @@ def open_registry_auth(args):
     check_output(['etcdctl', 'set',
                   '/lain/config/auth/registry',
                   auth_setting])
-    __restart_registry()
+    _restart_registry()
 
 
 def close_registry_auth():
@@ -184,10 +184,10 @@ def close_registry_auth():
     call(['etcdctl', 'rm',
           '/lain/config/auth/registry'],
          stderr=open('/dev/null', 'w'))
-    __restart_registry()
+    _restart_registry()
 
 
-def __restart_registry():
+def _restart_registry():
     info("restarting registry...")
     try:
         container_id = check_output(['docker', '-H', ':2376', 'ps', '-qf', 'name=registry.web.web']).strip()
