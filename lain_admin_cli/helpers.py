@@ -95,7 +95,7 @@ class Container(object):
                 self.podname = fields[1]
             elif fields[0] == 'DEPLOYD_POD_INSTANCE_NO':
                 self.instance = int(fields[1])
-        self.proctype = self.podname.split('.')[1]
+        self.proctype = self.podname.split('.')[-2]
         fields = self.info['Name'].split('.')[-1].split('-')
         self.version = int(fields[0][1:])
         self.drift = int(fields[2][1:])
