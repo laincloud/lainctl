@@ -59,7 +59,7 @@ class Auth(TwoLevelCommandBase):
     @arg('-s', '--secret', default='lain-cli_admin', help="Client secret get from the sso system.")
     @arg('-r', '--redirect_uri', default='https://example.com/', help="Redirect uri get from the sso system.")
     @arg('-u', '--sso_url', default='http://sso.lain.local', help="The sso_url need to be process")
-    @arg('-a', '--check_all', default='False', help="Whether check all apps to create app groups in sso")
+    @arg('-a', '--check_all', default=False, help="Whether check all apps to create app groups in sso")
     def init(self, args):
         '''
         init the auth of lain, create groups in sso for lain apps
@@ -85,12 +85,14 @@ class Auth(TwoLevelCommandBase):
         open the auth of lain
         '''
         scope = args.scope
-        info("ready to open auth of %s" % scope)
+        info("Ready to open auth of %s:" % scope)
         if scope != 'all':
             open_ops[scope](args)
         else:
             for _, op in open_ops.iteritems():
                 op(args)
+        info("Done.")
+
 
     @classmethod
     @expects_obj
@@ -100,12 +102,13 @@ class Auth(TwoLevelCommandBase):
         close the auth of lain
         '''
         scope = args.scope
-        info("ready to close auth of %s" % scope)
+        info("Ready to close auth of %s:" % scope)
         if scope != 'all':
             close_ops[scope]()
         else:
             for _, op in close_ops.iteritems():
                 op()
+        info("Done.")
 
 
 # as in console/authorize/utils.py
@@ -135,7 +138,7 @@ def add_subgroup_for_admin(sso_url, access_token, appname, subname, role):
 
 
 def add_sso_groups(sso_url, token, check_all):
-    if check_all != 'True':
+    if not check_all:
         appnames = ['console', 'registry', 'tinydns', 'webrouter', 'lvault']
         get_apps_success = True
     else:
@@ -205,7 +208,7 @@ def open_registry_auth(args):
     check_output(['etcdctl', 'set',
                   '/lain/config/auth/registry',
                   auth_setting])
-    __restart_registry()
+    _restart_registry()
 
 
 def close_registry_auth():
@@ -213,18 +216,17 @@ def close_registry_auth():
     call(['etcdctl', 'rm',
           '/lain/config/auth/registry'],
          stderr=open('/dev/null', 'w'))
-    __restart_registry()
+    _restart_registry()
 
 
-def __restart_registry():
+def _restart_registry():
     info("restarting registry...")
     try:
-        container_id = check_output(
-            ['docker', '-H', ':2376', 'ps', '-qf', 'name=registry.web.web']).strip()
-        info("container id of registry is : %s" % container_id)
-        check_output(['docker', '-H', ':2376', 'stop', container_id])
-        time.sleep(3)
-        check_output(['docker', '-H', ':2376', 'start', container_id])
+        container_ids = check_output(['docker', '-H', ':2376', 'ps', '-qf', 'name=registry.web.web'])
+        for container_id in container_ids.splitlines():
+            info("restarting registry container: %s" % container_id)
+            check_output(['docker', '-H', ':2376', 'restart', container_id])
+            time.sleep(3)
     except Exception as e:
         error("restart registry failed : %s, please try again or restart it manually." % str(e))
 
