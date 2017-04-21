@@ -12,6 +12,33 @@ from subprocess import check_output, call
 from lain_admin_cli.helpers import info, error, sso_login
 
 
+def get_etcd_client(etcd_authority):
+    etcd_host_and_port = etcd_authority.split(":")
+    if len(etcd_host_and_port) == 2:
+        return etcd.Client(host=etcd_host_and_port[0], port=int(etcd_host_and_port[1]))
+    elif len(etcd_host_and_port) == 1:
+        return etcd.Client(host=etcd_host_and_port[0], port=4001)
+    else:
+        raise Exception("invalid ETCD_AUTHORITY : %s" % etcd_authority)
+
+
+def get_console_domain():
+    try:
+        etcd_authority = environ.get("CONSOLE_ETCD_HOST", "etcd.lain:4001")
+        client = get_etcd_client(etcd_authority)
+        domain = client.read("/lain/config/domain").value
+        try:
+            main_domain = json.loads(client.read(
+                "/lain/config/extra_domains").value)[0]
+        except Exception as e:
+            print("use %s as a default prefix of group name" % domain)
+        else:
+            domain = main_domain
+        return domain
+    except Exception:
+        raise Exception("unable to get the console domain!")
+
+
 class Auth(TwoLevelCommandBase):
 
     @classmethod
@@ -37,13 +64,13 @@ class Auth(TwoLevelCommandBase):
         '''
         init the auth of lain, create groups in sso for lain apps
         '''
-        login_success, token = sso_login(args.sso_url, args.cid, args.secret, args.redirect_uri)
+        login_success, token = sso_login(
+            args.sso_url, args.cid, args.secret, args.redirect_uri)
         if login_success:
             add_sso_groups(args.sso_url, token, args.check_all)
         else:
             error("login failed.")
             exit(1)
-
 
     @classmethod
     @expects_obj
@@ -81,6 +108,32 @@ class Auth(TwoLevelCommandBase):
                 op()
 
 
+# as in console/authorize/utils.py
+def get_group_name_for_app(appname):
+    appname_prefix = environ.get(
+        "SSO_GROUP_NAME_PREFIX", "lainapp-%s" % get_console_domain())
+    return (appname_prefix + "-" + appname).replace('.', '-')
+
+# as in console/authorize/utils.py
+
+
+def get_group_fullname_for_app(appname):
+    group_fullname_prefix = environ.get(
+        "SSO_GROUP_FULLNAME_PREFIX", "lain app in %s: " % get_console_domain())
+    return "%s%s" % (group_fullname_prefix, appname)
+
+# as in console/authorize/utils.py
+
+
+def add_subgroup_for_admin(sso_url, access_token, appname, subname, role):
+    group_name = get_group_name_for_app(appname)
+    member_msg = {'role': role}
+    headers = {"Content-Type": "application/json",
+               "Accept": "application/json", 'Authorization': 'Bearer %s' % access_token}
+    url = "%s/api/groups/%s/group-members/%s" % (sso_url, group_name, subname)
+    return requests.request("PUT", url, headers=headers, json=member_msg, params=None)
+
+
 def add_sso_groups(sso_url, token, check_all):
     if check_all != 'True':
         appnames = ['console', 'registry', 'tinydns', 'webrouter', 'lvault']
@@ -91,24 +144,26 @@ def add_sso_groups(sso_url, token, check_all):
         return
     for app in appnames:
         try:
-            group_prefix = "ca"
-            appname_prefix = environ.get("SSO_GROUP_NAME_PREFIX", "ConsoleApp" + get_console_domain())
-            group_fullname_prefix = environ.get("SSO_GROUP_FULLNAME_PREFIX", "Console APP in %s: "%get_console_domain())
-            # the first character of groups in sso needs to be [a-zA-Z], be the same with console rule
-            group_name = "%s%s" %(group_prefix, hashlib.md5(appname_prefix + app).hexdigest()[0:30])
-            group_fullname = "%s%s" % (group_fullname_prefix, app)
-            group_msg = {'name' : group_name, 'fullname' : group_fullname}
-            headers = {"Content-Type":"application/json", "Accept":"application/json", 'Authorization' : 'Bearer %s'%token}
-            url = "%s/api/groups/" %sso_url
-            req = requests.request("POST", url, headers=headers, json=group_msg, verify=False)
+            group_name = get_group_name_for_app(app)
+            group_fullname = get_group_fullname_for_app(app)
+            group_msg = {'name': group_name, 'fullname': group_fullname}
+            headers = {"Content-Type": "application/json",
+                       "Accept": "application/json", 'Authorization': 'Bearer %s' % token}
+            url = "%s/api/groups/" % sso_url
+            req = requests.request(
+                "POST", url, headers=headers, json=group_msg, verify=False)
             if req.status_code == 201:
-                info("successfully create sso group for app %s" %app)
+                info("successfully create sso group for app %s" % app)
+                resp = add_subgroup_for_admin(
+                    sso_url, token, app, "lain", "admin")
+                info('add subgroup lain, response code: %s' % resp.status_code)
             else:
                 result = req.text
-                print("create sso group for app %s wrong: %s" %(app, result.encode('utf8')))
+                print("create sso group for app %s wrong: %s" %
+                      (app, result.encode('utf8')))
             time.sleep(3)
         except Exception as e:
-            print("create sso group for app %s wrong: %s" %(app, e))
+            print("create sso group for app %s wrong: %s" % (app, e))
 
 
 def get_console_apps(token):
@@ -122,34 +177,8 @@ def get_console_apps(token):
             appnames.append(app['appname'])
         return True, appnames
     except Exception as e:
-        print("Get console apps error: %s" %e)
+        print("Get console apps error: %s" % e)
         return False, appnames
-
-
-def get_console_domain():
-    try:
-        etcd_authority = environ.get("CONSOLE_ETCD_HOST", "etcd.lain:4001")
-        client = get_etcd_client(etcd_authority)
-        domain = client.read("/lain/config/domain").value
-        try:
-            main_domain = json.loads(client.read("/lain/config/extra_domains").value)[0]
-        except Exception as e:
-            print("use %s as a default prefix of group name" % domain)
-        else:
-            domain = main_domain
-        return domain
-    except Exception:
-        raise Exception("unable to get the console domain!")
-
-
-def get_etcd_client(etcd_authority):
-    etcd_host_and_port = etcd_authority.split(":")
-    if len(etcd_host_and_port) == 2:
-        return etcd.Client(host=etcd_host_and_port[0], port=int(etcd_host_and_port[1]))
-    elif len(etcd_host_and_port) == 1:
-        return etcd.Client(host=etcd_host_and_port[0], port=4001)
-    else:
-        raise Exception("invalid ETCD_AUTHORITY : %s" % etcd_authority)
 
 
 def open_console_auth(args):
@@ -190,7 +219,8 @@ def close_registry_auth():
 def __restart_registry():
     info("restarting registry...")
     try:
-        container_id = check_output(['docker', '-H', ':2376', 'ps', '-qf', 'name=registry.web.web']).strip()
+        container_id = check_output(
+            ['docker', '-H', ':2376', 'ps', '-qf', 'name=registry.web.web']).strip()
         info("container id of registry is : %s" % container_id)
         check_output(['docker', '-H', ':2376', 'stop', container_id])
         time.sleep(3)
