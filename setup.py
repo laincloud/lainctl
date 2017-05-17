@@ -9,7 +9,9 @@ lainctl = lain_admin_cli.cli:main
 
 requirements = [
     'argh==0.26.1',
-    'argcomplete==0.9.0'
+    'argcomplete==0.9.0',
+    'python-etcd==0.4.3',
+    'requests==2.11.1'
 ]
 
 setup(
