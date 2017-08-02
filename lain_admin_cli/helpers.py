@@ -12,6 +12,7 @@ requests.packages.urllib3.disable_warnings()
 playbooks_path = ""
 volume_dir = "/data/lain/volumes"
 rsync_secrets_file = "/etc/rsyncd.secrets"
+logs_dir = "/lain/logs"
 
 
 class TwoLevelCommandBase(object):
@@ -103,7 +104,8 @@ class Container(object):
         self.host = self.info['Node']['Name']
 
         for v in self.info['Mounts']:
-            if v['Source'].find('/data/lain/volumes') >= 0:
+            # logs_dir can be discarded when drift
+            if v['Source'].find('/data/lain/volumes') >= 0 and v['Destination'] != logs_dir:
                 self.volumes.append(v['Source'])
 
 

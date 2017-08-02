@@ -96,7 +96,7 @@ def fix_backupd(container, source, target):
 
 
 def drift_volumes(playbooks_path, containers, source, target):
-    volumes = reduce(lambda x, y: x + ["%s/%s/%s/%s" % (volume_dir, y.appname, y.podname, y.instance)], containers, [])
+    volumes = reduce(lambda x, y: x + y.volumes, containers, [])
     ids = reduce(lambda x, y: x + [y.info['Id']], containers, [])
     var_file = "/tmp/ansible-variables"
 
