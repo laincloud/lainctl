@@ -5,6 +5,8 @@ import httplib
 import json
 import time
 
+from datetime import datetime
+from os import environ
 from argh.decorators import arg
 from argh import CommandError
 from subprocess import check_output
@@ -29,7 +31,15 @@ REALM = "Bearer realm"
 SCOPE = "scope"
 SERVICE = "service"
 
-TIME_OUT = 5
+TIME_OUT = environ.get('REGISTRY_TIMEOUT', 5)
+
+DEFAULT_REMAIN_TIME = environ.get('REMAIN_TIME', 30 * 24 * 3600)
+
+
+def _time_during(ts1, ts2, t):
+    total_seconds = (datetime.fromtimestamp(ts1) -
+                     datetime.fromtimestamp(ts2)).total_seconds()
+    return total_seconds <= t
 
 
 def _domain():
@@ -158,8 +168,9 @@ def _images_in_repo(session, repo):
         if not tags:
             return images
         for tag in tags:
-            degist = _digest_from_tag(session, repo, tag)
-            images.append(Image(repo, tag, degist))
+            digest = _digest_from_tag(session, repo, tag)
+            if digest != "":
+                images.append(Image(repo, tag, digest))
         return images
     except Exception as e:
         error('Fetch repo(%s)\'s images failed! error:%s', repo, str(e))
@@ -173,7 +184,7 @@ def _image_delete(session, image):
     info("Delete image(%s) result:%s ", image, resp)
 
 
-def expired_repo_clear(session, repo, repo_remain):
+def expired_repo_clear(session, repo, repo_remain, time_remain):
     info('----------------------------')
     info('Start clean registry repo %s', repo)
     try:
@@ -185,16 +196,24 @@ def expired_repo_clear(session, repo, repo_remain):
         meta_images_map = {}
         rels_images_map = {}
         prep_images_map = {}
+        now = time.time()
         for image in images:
             tags_info = image.tag.split('-')
             if len(tags_info) != image_tag_split_len:
                 continue
 
-            if image.tag.startswith(PREPARE):
-                timestamp = int(tags_info[pos_timestamp + 1])
-            else:
-                timestamp = int(tags_info[pos_timestamp])
-
+            try:
+                if image.tag.startswith(PREPARE):
+                    timestamp = int(tags_info[pos_timestamp + 1])
+                else:
+                    timestamp = int(tags_info[pos_timestamp])
+            except Exception as e:
+                if image.tag.find('-config-') > 0:
+                    info("Deleting special config image: %s", image)
+                    _image_delete(session, image)
+                continue
+            if(_time_during(now, timestamp, time_remain)):
+                continue
             if image.tag.startswith(META):
                 meta_images_map[timestamp] = image
             elif image.tag.startswith(RELEASE):
@@ -221,14 +240,14 @@ def expired_repo_clear(session, repo, repo_remain):
         info('Clean registry repo %s over', repo)
 
 
-def expired_all_repos_clear(session, repo_remain):
+def expired_all_repos_clear(session, repo_remain, time_remain):
     info('Start clean registry')
     info('============================')
     repos = _repos_in_registry(session)
     if not isinstance(repos, list) or len(repos) == 0:
         return
     for repo in repos:
-        expired_repo_clear(session, repo, repo_remain)
+        expired_repo_clear(session, repo, repo_remain, time_remain)
     info('============================')
     info('Clean registry over')
 
@@ -269,15 +288,18 @@ class Registry(TwoLevelCommandBase):
     @classmethod
     @arg('-t', '--target', required=False, help="clean target repository in registry")
     @arg('-n', '--num', required=False, help="repository's remained quantity of images in registry(must bigger than 0)")
-    def clean(self, num=10, target="all"):
+    @arg('-d', '--time', required=False, help="repository's remained time(seconds) of images in registry(must bigger than 0)")
+    def clean(self, num=20, time=DEFAULT_REMAIN_TIME, target="all"):
         session = requests.Session()
         self._update_domain()
         if num < 1:
             raise CommandError("num must bigger than 0")
+        if time < 1:
+            raise CommandError("time must bigger than 0")
         if target == "all":
-            expired_all_repos_clear(session, num)
+            expired_all_repos_clear(session, num, time)
         else:
-            expired_repo_clear(session, target, num)
+            expired_repo_clear(session, target, num, time)
 
     @classmethod
     def _update_domain(self):
