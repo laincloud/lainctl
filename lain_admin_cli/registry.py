@@ -36,6 +36,24 @@ TIME_OUT = environ.get('REGISTRY_TIMEOUT', 5)
 DEFAULT_REMAIN_TIME = environ.get('REMAIN_TIME', 30 * 24 * 3600)
 
 
+class Repo:
+
+    def __init__(self, repo_name, tags):
+        self.repo_name = repo_name
+        self.tags = tags
+
+
+class Image:
+
+    def __init__(self, repo_name, tag, digest):
+        self.repo_name = repo_name
+        self.tag = tag
+        self.digest = digest
+
+    def __str__(self):
+        return "{%s, %s, %s}" % (self.repo_name, self.tag, self.digest)
+
+
 def _time_during(ts1, ts2, t):
     total_seconds = (datetime.fromtimestamp(ts1) -
                      datetime.fromtimestamp(ts2)).total_seconds()
@@ -118,25 +136,7 @@ def _token_url(auth_head):
     return token_url
 
 
-class Repo:
-
-    def __init__(self, repo_name, tags):
-        self.repo_name = repo_name
-        self.tags = tags
-
-
-class Image:
-
-    def __init__(self, repo_name, tag, digest):
-        self.repo_name = repo_name
-        self.tag = tag
-        self.digest = digest
-
-    def __str__(self):
-        return "{%s, %s, %s}" % (self.repo_name, self.tag, self.digest)
-
-
-def _repos_in_registry(session):
+def _registry_repos(session):
     repo_url = REPOS_URL_TEMPLATE % registry_host
     resp = _request(session, 'GET', repo_url)
     if resp is None:
@@ -157,7 +157,7 @@ def _digest_from_tag(session, repo, tag):
     return resp.headers.get('Docker-Content-Digest')
 
 
-def _images_in_repo(session, repo):
+def _repo_images(session, repo):
     tags_url = TAGS_URL_TEMPLATE % (registry_host, repo)
     resp = _request(session, 'GET', tags_url)
     if resp is None:
@@ -194,7 +194,7 @@ def _image_timestamp(image):
         return 0
 
 
-def _image_delete(session, image):
+def _delete_image(session, image):
     info("Deleting image: %s", image)
     manifest_url = MANIFEST_URL_TEMPLATE % (
         registry_host, image.repo_name, image.digest)
@@ -202,41 +202,37 @@ def _image_delete(session, image):
     info("Delete image(%s) result:%s ", image, resp)
 
 
-def repo_tags_inorder(session, repo):
-    images = _images_in_repo(session, repo)
+def ordered_images(session, repo):
+    images = _repo_images(session, repo)
     times_images = {}
-    index = 0
     for image in images:
         timestamp = _image_timestamp(image)
-        if timestamp == 0:
-            timestamp = index
-            index += 1
-        times_images[str(timestamp)+image.tag] = image
+        times_images[str(timestamp) + image.tag] = image
     return sort_map_values(times_images)
 
 
-def repo_tag_delete(session, repo, tag):
+def delete_image_tag(session, repo, tag):
     digest = _digest_from_tag(session, repo, tag)
     if digest == '':
         error('no such repo or repo has no such tag')
         return
     image = Image(repo, tag, digest)
-    _image_delete(session, image)
+    _delete_image(session, image)
 
 
-def repo_delete(session, repo):
+def delete_repo(session, repo):
     info('start delete repo:%s!', repo)
-    images = _images_in_repo(session, repo)
+    images = _repo_images(session, repo)
     for image in images:
-        _image_delete(session, image)
+        _delete_image(session, image)
     info('delete repo:%s over!', repo)
 
 
-def expired_repo_clear(session, repo, repo_remain, time_remain):
+def clear_expired_repo(session, repo, repo_remain, time_remain):
     info('----------------------------')
     info('Start clean registry repo %s', repo)
     try:
-        images = _images_in_repo(session, repo)
+        images = _repo_images(session, repo)
         if len(images) <= repo_remain:
             return
         meta_images_map = {}
@@ -247,10 +243,9 @@ def expired_repo_clear(session, repo, repo_remain, time_remain):
             timestamp = _image_timestamp(image)
             if timestamp == 0:
                 if image.tag.find('-config-') > 0:
-                    info("Deleting special config image: %s", image)
-                    _image_delete(session, image)
+                    info("specific config image: %s", image)
+                    _delete_image(session, image)
                 continue
-
             if(_time_during(now, timestamp, time_remain)):
                 continue
             if image.tag.startswith(META):
@@ -265,25 +260,25 @@ def expired_repo_clear(session, repo, repo_remain, time_remain):
         rels_images = sort_map_values(rels_images_map)
 
         for image in prep_images[repo_remain:]:
-            _image_delete(session, image)
+            _delete_image(session, image)
         for image in meta_images[repo_remain:]:
-            _image_delete(session, image)
+            _delete_image(session, image)
         for image in rels_images[repo_remain:]:
-            _image_delete(session, image)
+            _delete_image(session, image)
     except Exception as e:
         error('Clean registry failed! error:%s', str(e))
     finally:
         info('Clean registry repo %s over', repo)
 
 
-def expired_all_repos_clear(session, repo_remain, time_remain):
+def clear_all_expired_repos(session, repo_remain, time_remain):
     info('Start clean registry')
     info('============================')
-    repos = _repos_in_registry(session)
+    repos = _registry_repos(session)
     if not isinstance(repos, list) or len(repos) == 0:
         return
     for repo in repos:
-        expired_repo_clear(session, repo, repo_remain, time_remain)
+        clear_expired_repo(session, repo, repo_remain, time_remain)
     info('============================')
     info('Clean registry over')
 
@@ -297,7 +292,7 @@ class Registry(TwoLevelCommandBase):
 
     @classmethod
     def subcommands(self):
-        return [self.list, self.clean, self.delete]
+        return [self.list, self.delete, self.clean]
 
     @classmethod
     def namespace(self):
@@ -310,18 +305,18 @@ class Registry(TwoLevelCommandBase):
     @classmethod
     @arg('-t', '--target', required=False, help="target repository in registry")
     @arg('-s', '--sort', required=False, help="return results in order")
-    def list(self, target="all", sort=True):
+    def list(self, target="all", sort=False):
         session = requests.Session()
         self._update_domain()
         if target == "all":
-            repos = _repos_in_registry(session)
+            repos = _registry_repos(session)
             for repo in repos:
                 info(repo)
         else:
             if sort:
-                images = repo_tags_inorder(session, target)
+                images = ordered_images(session, target)
             else:
-                images = _images_in_repo(session, target)
+                images = _repo_images(session, target)
             for image in images:
                 info('%s', image)
 
@@ -332,9 +327,9 @@ class Registry(TwoLevelCommandBase):
         session = requests.Session()
         self._update_domain()
         if tag != '':
-            repo_tag_delete(session, repo, tag)
+            delete_image_tag(session, repo, tag)
         else:
-            repo_delete(session, repo)
+            delete_repo(session, repo)
 
     @classmethod
     @arg('-t', '--target', required=False, help="clean target repository in registry")
@@ -348,9 +343,9 @@ class Registry(TwoLevelCommandBase):
         if time < 1:
             raise CommandError("time must bigger than 0")
         if target == "all":
-            expired_all_repos_clear(session, num, time)
+            clear_all_expired_repos(session, num, time)
         else:
-            expired_repo_clear(session, target, num, time)
+            clear_expired_repo(session, target, num, time)
 
     @classmethod
     def _update_domain(self):
