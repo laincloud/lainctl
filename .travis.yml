@@ -1,0 +1,12 @@
+language: python
+python:
+    - 2.7
+install:
+    # Travis's pre-installed pip and pytest are too old:
+    # https://docs.travis-ci.com/user/languages/python/#Pre-installed-packages
+    - pip install --upgrade setuptools
+    - python setup.py install
+script: echo ok
+
+after_success:
+    - echo ok
