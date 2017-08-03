@@ -11,7 +11,7 @@ from argh.decorators import arg
 from argh import CommandError
 from subprocess import check_output
 from lain_admin_cli.helpers import (
-    TwoLevelCommandBase, info, error
+    TwoLevelCommandBase, info, warn, error
 )
 
 REPOS_URL_TEMPLATE = "http://%s/v2/_catalog"
@@ -133,7 +133,7 @@ class Image:
         self.digest = digest
 
     def __str__(self):
-        return "%s, %s, %s" % (self.repo_name, self.tag, self.digest)
+        return "{%s, %s, %s}" % (self.repo_name, self.tag, self.digest)
 
 
 def _repos_in_registry(session):
@@ -177,19 +177,65 @@ def _images_in_repo(session, repo):
     return []
 
 
+def _image_timestamp(image):
+    try:
+        pos_timestamp = 1
+        image_tag_split_len = 3
+        tags_info = image.tag.split('-')
+        if len(tags_info) != image_tag_split_len:
+            return 0
+        if image.tag.startswith(PREPARE):
+            timestamp = int(tags_info[pos_timestamp + 1])
+        else:
+            timestamp = int(tags_info[pos_timestamp])
+        return timestamp
+    except Exception as e:
+        warn('Fetch timestamp failed for image:%s!', image)
+        return 0
+
+
 def _image_delete(session, image):
+    info("Deleting image: %s", image)
     manifest_url = MANIFEST_URL_TEMPLATE % (
         registry_host, image.repo_name, image.digest)
     resp = _request(session, 'DELETE', manifest_url)
     info("Delete image(%s) result:%s ", image, resp)
 
 
+def repo_tags_inorder(session, repo):
+    images = _images_in_repo(session, repo)
+    times_images = {}
+    index = 0
+    for image in images:
+        timestamp = _image_timestamp(image)
+        if timestamp == 0:
+            timestamp = index
+            index += 1
+        times_images[str(timestamp)+image.tag] = image
+    return sort_map_values(times_images)
+
+
+def repo_tag_delete(session, repo, tag):
+    digest = _digest_from_tag(session, repo, tag)
+    if digest == '':
+        error('no such repo or repo has no such tag')
+        return
+    image = Image(repo, tag, digest)
+    _image_delete(session, image)
+
+
+def repo_delete(session, repo):
+    info('start delete repo:%s!', repo)
+    images = _images_in_repo(session, repo)
+    for image in images:
+        _image_delete(session, image)
+    info('delete repo:%s over!', repo)
+
+
 def expired_repo_clear(session, repo, repo_remain, time_remain):
     info('----------------------------')
     info('Start clean registry repo %s', repo)
     try:
-        image_tag_split_len = 3
-        pos_timestamp = 1
         images = _images_in_repo(session, repo)
         if len(images) <= repo_remain:
             return
@@ -198,20 +244,13 @@ def expired_repo_clear(session, repo, repo_remain, time_remain):
         prep_images_map = {}
         now = time.time()
         for image in images:
-            tags_info = image.tag.split('-')
-            if len(tags_info) != image_tag_split_len:
-                continue
-
-            try:
-                if image.tag.startswith(PREPARE):
-                    timestamp = int(tags_info[pos_timestamp + 1])
-                else:
-                    timestamp = int(tags_info[pos_timestamp])
-            except Exception as e:
+            timestamp = _image_timestamp(image)
+            if timestamp == 0:
                 if image.tag.find('-config-') > 0:
                     info("Deleting special config image: %s", image)
                     _image_delete(session, image)
                 continue
+
             if(_time_during(now, timestamp, time_remain)):
                 continue
             if image.tag.startswith(META):
@@ -226,13 +265,10 @@ def expired_repo_clear(session, repo, repo_remain, time_remain):
         rels_images = sort_map_values(rels_images_map)
 
         for image in prep_images[repo_remain:]:
-            info("Deleting image: %s", image)
             _image_delete(session, image)
         for image in meta_images[repo_remain:]:
-            info("Deleting image: %s", image)
             _image_delete(session, image)
         for image in rels_images[repo_remain:]:
-            info("Deleting image: %s", image)
             _image_delete(session, image)
     except Exception as e:
         error('Clean registry failed! error:%s', str(e))
@@ -261,7 +297,7 @@ class Registry(TwoLevelCommandBase):
 
     @classmethod
     def subcommands(self):
-        return [self.list, self.clean]
+        return [self.list, self.clean, self.delete]
 
     @classmethod
     def namespace(self):
@@ -273,7 +309,8 @@ class Registry(TwoLevelCommandBase):
 
     @classmethod
     @arg('-t', '--target', required=False, help="target repository in registry")
-    def list(self, target="all"):
+    @arg('-s', '--sort', required=False, help="return results in order")
+    def list(self, target="all", sort=True):
         session = requests.Session()
         self._update_domain()
         if target == "all":
@@ -281,9 +318,23 @@ class Registry(TwoLevelCommandBase):
             for repo in repos:
                 info(repo)
         else:
-            images = _images_in_repo(session, target)
+            if sort:
+                images = repo_tags_inorder(session, target)
+            else:
+                images = _images_in_repo(session, target)
             for image in images:
                 info('%s', image)
+
+    @classmethod
+    @arg('-r', '--repo', required=True, help="repository in registry")
+    @arg('-t', '--tag', required=False, help="image tag in registry")
+    def delete(self, repo='', tag=''):
+        session = requests.Session()
+        self._update_domain()
+        if tag != '':
+            repo_tag_delete(session, repo, tag)
+        else:
+            repo_delete(session, repo)
 
     @classmethod
     @arg('-t', '--target', required=False, help="clean target repository in registry")
