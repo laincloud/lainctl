@@ -1,12 +1,16 @@
 language: python
+
 python:
-    - 2.7
-install:
-    # Travis's pre-installed pip and pytest are too old:
-    # https://docs.travis-ci.com/user/languages/python/#Pre-installed-packages
-    - pip install --upgrade setuptools
-    - python setup.py install
+  - 2.7
+
+install: true
+
 script: echo ok
 
-after_success:
-    - echo ok
+deploy:
+  provider: pypi
+  user: laincloud
+  password:
+    secure: dhvBPqk8khkY/REa+7zbY2zWJR/WY0TffHNWtLpIi7XooHqt9sBowyynX5ocTfoBuhvs78AXv5ORoZRGyw4mMc4r8+Plgvf0vVyjaRNFeJOygF6JDbIeraDpf6gVO7x4f+cyS65tZvHeZRQK72k0k/hFEZIeCcD+RzAB8zCWpy86afstnrN+PtI0wUTASa4iT+WouYl5Z82b1AImZrPbg6Sk2iy20DLl/9b3gQKoENMyZi3VrV5DcSLUMHw4B/LGy7SGHMssWGu035bQXVeCFyVrrBZVh/99fpVZmHExw8al+uXdbVE5U2MrxyO+KpgFMDBFm7NRhsvfgUjxlknFsFxlnhxPqxyus7nKC/gaP926lIovnYDirIQ6mePJFwICb2P9zGieYuEN1bpppvvEq9WGEzqRxmBXYA8RDzv3huTgHD1VvMSwIKaQC9XJsb2OqNvfdPwrrHgHzpN2IuXwe251zdHgwfuCW9VrdIVq4H5/BspWF4gjAxP6ljH2mRzvbT/rppvj73mMJ4lYYbCd96b5xgpPig2zRVYfF5/PBwfuX0JEay6gIpRgdc3fXlpmXqfeoXNE+xZTaGSj6Ugx13xya6SuHVBFCalGqJXy9e266DUGSPP4+MhoeJbQjhaSRWl/pUXVF6Dfb29uFwdHf9MGjtpRX/OQLREsSROhkbI=
+  on:
+    tags: true
