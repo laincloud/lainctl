@@ -13,10 +13,12 @@ from subprocess import check_output
 from lain_admin_cli.helpers import (
     TwoLevelCommandBase, info, warn, error
 )
+from lain_admin_cli.utils.utils import regex_match
 
 REPOS_URL_TEMPLATE = "http://%s/v2/_catalog"
 TAGS_URL_TEMPLATE = "http://%s/v2/%s/tags/list"
 MANIFEST_URL_TEMPLATE = "http://%s/v2/%s/manifests/%s"
+HTTP_REGISTRY_HOST = 'http://%s'
 
 REPOSITORIES = "repositories"
 PREPARE = "prepare"
@@ -137,15 +139,23 @@ def _token_url(auth_head):
 
 
 def _registry_repos(session):
-    repo_url = REPOS_URL_TEMPLATE % registry_host
-    resp = _request(session, 'GET', repo_url)
-    if resp is None:
-        return[]
+    url = REPOS_URL_TEMPLATE % registry_host
+    repos = []
     try:
-        return resp.json().get(REPOSITORIES)
+        while(True):
+            resp = _request(session, 'GET', url)
+            if resp is None:
+                return[]
+            repos.extend(resp.json().get(REPOSITORIES))
+            link = resp.headers.get('Link', None)
+            if link is None:
+                break
+            uri = regex_match(r'<(.*)>; rel="next"', link)
+            url = (HTTP_REGISTRY_HOST % registry_host) + uri
+        return repos
     except Exception as e:
         error('Fetch all repositories failed! error:%s', str(e))
-    return []
+    return repos
 
 
 def _digest_from_tag(session, repo, tag):
@@ -231,15 +241,20 @@ def delete_repo(session, repo):
 def clear_expired_repo(session, repo, repo_remain, time_remain):
     info('----------------------------')
     info('Start clean registry repo %s', repo)
+    classified_images = {
+        META: {}, RELEASE: {}, PREPARE: {}
+    }
+    now = time.time()
     try:
         images = _repo_images(session, repo)
         if len(images) <= repo_remain:
             return
-        meta_images_map = {}
-        rels_images_map = {}
-        prep_images_map = {}
-        now = time.time()
         for image in images:
+            try:
+                image_type = image.tag.split('-')[0]
+            except Exception as e:
+                warn('Strange image :%s', image.tag)
+                continue
             timestamp = _image_timestamp(image)
             if timestamp == 0:
                 if image.tag.find('-config-') > 0:
@@ -248,23 +263,18 @@ def clear_expired_repo(session, repo, repo_remain, time_remain):
                 continue
             if(_time_during(now, timestamp, time_remain)):
                 continue
-            if image.tag.startswith(META):
-                meta_images_map[timestamp] = image
-            elif image.tag.startswith(RELEASE):
-                rels_images_map[timestamp] = image
-            elif image.tag.startswith(PREPARE):
-                prep_images_map[timestamp] = image
 
-        prep_images = sort_map_values(prep_images_map)
-        meta_images = sort_map_values(meta_images_map)
-        rels_images = sort_map_values(rels_images_map)
+            target_type_images = classified_images.get(image_type, None)
+            if target_type_images is None:
+                warn('Strange image type:%s', image.tag)
+                continue
 
-        for image in prep_images[repo_remain:]:
-            _delete_image(session, image)
-        for image in meta_images[repo_remain:]:
-            _delete_image(session, image)
-        for image in rels_images[repo_remain:]:
-            _delete_image(session, image)
+            target_type_images[timestamp] = image
+
+        for _, image_map in classified_images.items():
+            sorted_images = sort_map_values(image_map)
+            for image in sorted_images[repo_remain:]:
+                _delete_image(session, image)
     except Exception as e:
         error('Clean registry failed! error:%s', str(e))
     finally:
