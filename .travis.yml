@@ -3,9 +3,15 @@ language: python
 python:
   - 2.7
 
-install: true
+install:
+  - python setup.py install
+  - pip install codecov
 
-script: echo ok
+script:
+  - coverage run tests.py
+
+after_success:
+  - codecov
 
 deploy:
   provider: pypi
