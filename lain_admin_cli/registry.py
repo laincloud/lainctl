@@ -150,7 +150,7 @@ def _registry_repos(session):
             link = resp.headers.get('Link', None)
             if link is None:
                 break
-            uri = regex_match(r'<(.*)>; rel="next"', link)
+            uri = regex_match(r'<(.*)>; rel="next"', link)[0]
             url = (HTTP_REGISTRY_HOST % registry_host) + uri
         return repos
     except Exception as e:
