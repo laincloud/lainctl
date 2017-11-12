@@ -86,6 +86,7 @@ class Node(TwoLevelCommandBase):
     @arg('nodes', nargs='+', help="the nodes need to add [example: node2:192.168.77.22]")
     @arg('-p', '--playbooks', required=True)
     @arg('-P', '--ssh-port', default=22, help="SSH port of the node to be added")
+    @arg('-l', '--labels', nargs='+', default="", help="The labels added to docker daemon in the node. [example: disk=ssd]")
     @arg('-d', '--docker-device', default="", help="The block device use for docker's devicemapper storage."
         "docker will run on loop-lvm if this is not given, which is not proposed")
     def add(self, args):
@@ -246,6 +247,8 @@ def run_addnode_ansible(args):
     }
     if args.docker_device:
         envs['docker_device'] = args.docker_device
+    if args.labels:
+        envs['node_labels'] = args.labels
     return run_ansible_cmd(args.playbooks, envs, file_name='site.yaml')
 
 
@@ -297,6 +300,7 @@ def assert_etcd_member(rm_node):
         if node_name == line.split()[1].split('=')[1]:
             raise RemoveException("%s is a etcd member, you should remove it from "
                                   "etcd cluster before remove it from lain" % rm_node)
+
 
 def copy_public_key(ip):
     cmd = ['sudo', 'ssh-copy-id', '-i', '/root/.ssh/lain.pub']
