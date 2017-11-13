@@ -203,8 +203,7 @@ def sso_login(sso_url, cid, secret, redirect_uri):
 
 def run_ansible_cmd(playbooks_path, envs, file_name='role.yaml'):
     cmd = ['ansible-playbook', '-i', os.path.join(playbooks_path, 'cluster')]
-    for k, v in envs.iteritems():
-        cmd += ['-e', '%s=%s' % (k, v)]
+    cmd += ['-e', json.dumps(envs)]
     cmd += [os.path.join(playbooks_path, file_name)]
     info('cmd is: %s', ' '.join(cmd))
     try:
