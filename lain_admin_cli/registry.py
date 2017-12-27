@@ -33,9 +33,9 @@ REALM = "Bearer realm"
 SCOPE = "scope"
 SERVICE = "service"
 
-TIME_OUT = environ.get('REGISTRY_TIMEOUT', 5)
+TIME_OUT = float(environ.get('REGISTRY_TIMEOUT', 5))
 
-DEFAULT_REMAIN_TIME = environ.get('REMAIN_TIME', 30 * 24 * 3600)
+DEFAULT_REMAIN_TIME = int(environ.get('REMAIN_TIME', 30 * 24 * 3600))
 
 
 class Repo:
@@ -192,7 +192,7 @@ def _image_timestamp(image):
         pos_timestamp = 1
         image_tag_split_len = 3
         tags_info = image.tag.split('-')
-        if len(tags_info) != image_tag_split_len:
+        if len(tags_info) < image_tag_split_len:
             return 0
         if image.tag.startswith(PREPARE):
             timestamp = int(tags_info[pos_timestamp + 1])
