@@ -4,12 +4,17 @@ from argh import CommandError
 from argh.decorators import arg, expects_obj
 from lain_admin_cli.helpers import Node as NodeInfo
 from lain_admin_cli.helpers import (
-    yes_or_no, info, error, RemoveException, AddNodeException, _yellow,
+    yes_or_no, info, warn, error, RemoveException, AddNodeException, _yellow,
     TwoLevelCommandBase, run_ansible_cmd
 )
-from subprocess import check_output, check_call, STDOUT
-import requests, signal, json, os
+from subprocess import check_output, check_call, Popen, STDOUT, PIPE
+import requests
+import signal
+import json
+import os
+import time
 from lain_admin_cli.utils.health import NodeHealth
+
 
 def sigint_handler(signum, frame):
     pass
@@ -88,7 +93,7 @@ class Node(TwoLevelCommandBase):
     @arg('-P', '--ssh-port', default=22, help="SSH port of the node to be added")
     @arg('-l', '--labels', nargs='+', default="", help="The labels added to docker daemon in the node. [example: disk=ssd]")
     @arg('-d', '--docker-device', default="", help="The block device use for docker's devicemapper storage."
-        "docker will run on loop-lvm if this is not given, which is not proposed")
+         "docker will run on loop-lvm if this is not given, which is not proposed")
     def add(self, args):
         """add a new node to lain"""
         try:
@@ -118,7 +123,8 @@ class Node(TwoLevelCommandBase):
             error(str(e))
         finally:
             for name, ip in nodes:
-                check_call(['etcdctl', 'rm', '/lain/nodes/new/%s:%s:%s' % (name, ip, port)])
+                check_call(
+                    ['etcdctl', 'rm', '/lain/nodes/new/%s:%s:%s' % (name, ip, port)])
 
     @classmethod
     def __check_nodes_validation(self, nodes):
@@ -131,15 +137,18 @@ class Node(TwoLevelCommandBase):
                 raise AddNodeException("There are duplicate node IPs")
 
             if os.getuid() != 0:
-                raise AddNodeException("Need run add-node script with root privilege please.")
+                raise AddNodeException(
+                    "Need run add-node script with root privilege please.")
 
             duplicates = self.__check_existing(nodes)
             if duplicates:
-                raise AddNodeException("Some nodes already exist in the cluster: " + ", ".join(duplicates))
+                raise AddNodeException(
+                    "Some nodes already exist in the cluster: " + ", ".join(duplicates))
         except ValueError:
             raise AddNodeException("the value of param nodes is wrong")
         except IndexError:
-            raise AddNodeException("error parse param nodes, needs like 'node2:192.168.77.22'")
+            raise AddNodeException(
+                "error parse param nodes, needs like 'node2:192.168.77.22'")
 
         return nodes
 
@@ -171,27 +180,36 @@ class Node(TwoLevelCommandBase):
         target = Node(target) if target != "" else None
         key = "%s:%s:%s" % (node.name, node.ip, node.ssh_port)
 
-        output = check_output(['etcdctl', 'ls', '/lain/nodes/nodes'], stderr=STDOUT)
+        output = check_output(
+            ['etcdctl', 'ls', '/lain/nodes/nodes'], stderr=STDOUT)
         if len(output.splitlines()) == 1:
-            error("%s is the last node of lain, can not be removed" % output.splitlines()[0].split('/')[-1])
+            error("%s is the last node of lain, can not be removed" %
+                  output.splitlines()[0].split('/')[-1])
             return
 
-        check_output(['etcdctl', 'set', '/lain/nodes/removing/%s' % key, ""], stderr=STDOUT)
+        check_output(['etcdctl', 'set', '/lain/nodes/removing/%s' %
+                      key, ""], stderr=STDOUT)
 
         try:
-            assert_etcd_member(node.name) # check if the node is a etcd member
+            assert_etcd_member(node.name)  # check if the node is a etcd member
             info("Remove the lain node %s" % node.name)
             if not yes_or_no("Are you sure?", default='no', color=_yellow):
                 raise(RemoveException("Action was canceled"))
-            drift_swarm_manager(playbooks, node, target) # restart a new swarm manager if a swarm mansger on this node
+            # restart a new swarm manager if a swarm mansger on this node
+            drift_swarm_manager(playbooks, node, target)
+            remove_node_containers(node.name)
             if run_removenode_ansible(playbooks):
                 error("run remove node ansible failed")
                 return
-            check_call(['etcdctl', 'rm', '/lain/nodes/nodes/%s' % key]) # remove the node from etcd
+            # remove maintain for node
+            self.maintain(node.name, True)
+            check_call(['etcdctl', 'rm', '/lain/nodes/nodes/%s' %
+                        key], stderr=STDOUT)  # remove the node from etcd
         except RemoveException as e:
             error(str(e))
         finally:
-            check_output(['etcdctl', 'rm', '/lain/nodes/removing/%s' % key])
+            check_output(
+                ['etcdctl', 'rm', '/lain/nodes/removing/%s' % key], stderr=STDOUT)
         return
 
     @classmethod
@@ -204,9 +222,10 @@ class Node(TwoLevelCommandBase):
         """
         for node in nodes:
             node_info = NodeInfo(node)
-            key = "%s:%s:%s" % (node_info.name, node_info.ip, node_info.ssh_port)
+            key = "%s:%s:%s" % (
+                node_info.name, node_info.ip, node_info.ssh_port)
             check_output(['etcdctl', 'set', '/lain/nodes/clean/%s' % key, node_info.ip],
-                    stderr=STDOUT)
+                         stderr=STDOUT)
             run_cleannode_ansible(playbooks)
             check_output(['etcdctl', 'rm', '/lain/nodes/clean/%s' % key])
 
@@ -229,7 +248,8 @@ class Node(TwoLevelCommandBase):
             info("DELETE %s" % url)
             resp = requests.delete(url)
         if resp.status_code >= 300:
-            error("%s constraint on node %s fail: %s" % (operator, node.name, resp.text))
+            error("%s constraint on node %s fail: %s" %
+                  (operator, node.name, resp.text))
         else:
             info("%s constraint on node %s success." % (operator, node.name))
 
@@ -269,7 +289,8 @@ def run_removenode_ansible(playbooks_path):
 
 
 def drift_swarm_manager(playbooks_path, rm_node, target):
-    is_swarm_manager, key = False, "%s:%s:%s" % (rm_node.name, rm_node.ip, rm_node.ssh_port)
+    is_swarm_manager, key = False, "%s:%s:%s" % (
+        rm_node.name, rm_node.ip, rm_node.ssh_port)
     output = check_output(['etcdctl', 'ls', '/lain/nodes/swarm-managers'])
     for line in output.splitlines():
         if line.split('/')[-1] == key:
@@ -284,13 +305,45 @@ def drift_swarm_manager(playbooks_path, rm_node, target):
                               "run `remove-node clear -t[--target] ...`" % rm_node.name))
 
     check_call(['etcdctl', 'rm', '/lain/nodes/swarm-managers/%s' % key])
-    check_call(['etcdctl', 'set','/lain/nodes/swarm-managers/%s:%s' % (target.name, target.ssh_port), ""])
+    check_call(['etcdctl', 'set', '/lain/nodes/swarm-managers/%s:%s' %
+                (target.name, target.ssh_port), ""])
 
     envs = dict()
     envs['target'] = 'nodes'
     envs['role'] = 'swarm'
     info('The removed node is a swarm manager, now start a swarm manager on another node.')
     run_ansible_cmd(playbooks_path, envs)
+
+
+def remove_node_containers(nodename):
+    url = "http://deployd.lain:9003/api/nodes?node=%s" % nodename
+
+    # Call deployd api
+    info("DELETE %s" % url)
+    resp = requests.delete(url)
+    if resp.status_code >= 300:
+        error("Deployd remove node api response a error, %s." % resp.text)
+
+    # waiting for deployd complete
+    print(">>>(need some minutes)Waiting for deployd drift %s's containers" % nodename)
+    while True:
+        try:
+            output = Popen(['docker', '-H', 'swarm.lain:2376', 'ps',
+                            '-a', '-f', 'node=%s' % nodename, '-f',
+                            'label=com.docker.swarm.id'], stdout=PIPE)
+            exclude_portals = check_output(
+                ['grep', '-v', '.portal.portal'], stdin=output.stdout)
+            containers = len(exclude_portals.splitlines()) - 1
+            if containers > 0:
+                warn("%d containers in node %s need to drift" %
+                     (containers, nodename))
+                time.sleep(3)
+            else:
+                info("all containers in node %s drifted successed" % nodename)
+                break
+        except Exception as e:
+            info('check containers info with err:%s' % e)
+            time.sleep(3)
 
 
 def assert_etcd_member(rm_node):
