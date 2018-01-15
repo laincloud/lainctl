@@ -12,6 +12,7 @@ import requests
 import signal
 import json
 import os
+import sys
 import time
 from lain_admin_cli.utils.health import NodeHealth
 
@@ -27,7 +28,8 @@ class Node(TwoLevelCommandBase):
 
     @classmethod
     def subcommands(self):
-        return [self.list, self.inspect, self.add, self.remove, self.clean, self.maintain, self.health]
+        return [self.list, self.inspect, self.add, self.remove, self.clean,
+                self.maintain, self.health, self.change_labels]
 
     @classmethod
     def namespace(self):
@@ -82,9 +84,20 @@ class Node(TwoLevelCommandBase):
                     "is_lain_managers": node in managers,
                     "is_etcd_member": node in etcd_members,
                     "is_swarm_manager": node in swarm_members,
+                    "labels": self.__get_node_labels(item.ip),
                 }, indent=4)
                 return
         raise CommandError("Unkown node name %s" % node)
+
+    @classmethod
+    def __get_node_labels(self, node_ip):
+        r = requests.get('http://{}:2375/info'.format(node_ip), timeout=5)
+        labels = r.json()['Labels']
+
+        if labels is None:
+            return []
+
+        return labels
 
     @classmethod
     @expects_obj
@@ -258,6 +271,50 @@ class Node(TwoLevelCommandBase):
         health = NodeHealth()
         health.run()
 
+    @classmethod
+    @arg('nodes', nargs='+')
+    @arg('-c', '--change-type', choices=['add', 'delete'], required=True)
+    @arg('-l', '--labels', nargs='+', type=str, required=True,
+         help='the labels to add, for example: k1=v1 k2=v2')
+    @arg('-p', '--playbooks', required=True)
+    def change_labels(self, nodes, change_type="", labels=[], playbooks=""):
+        normlized_labels = {}
+        for x in labels:
+            ys = x.split('=')
+            if len(ys) != 2 or ys[0].strip() == '' or ys[1].strip() == '':
+                error('{} is not $k=$v format'.format(x))
+                sys.exit(1)
+
+            key, value = ys[0].strip(), ys[1].strip()
+            if key in normlized_labels:
+                error('duplicate key {}'.format(key))
+                sys.exit(1)
+
+            normlized_labels[key] = value
+        diff_labels = ['{}={}'.format(k, v)
+                       for k, v in normlized_labels.items()]
+
+        try:
+            for node in nodes:
+                node_info = NodeInfo(node)
+                key = "{}:{}:{}".format(node_info.name, node_info.ip,
+                                        node_info.ssh_port)
+                check_output(['etcdctl', 'set',
+                              '/lain/nodes/changing_labels/{}'.format(key),
+                              node_info.ip], stderr=STDOUT)
+            run_change_labels_ansible(playbooks, change_type, diff_labels)
+        except Exception as e:
+            error("Exception: {}.".format(e))
+            sys.exit(1)
+        finally:
+            for node in nodes:
+                node_info = NodeInfo(node)
+                key = "{}:{}:{}".format(node_info.name, node_info.ip,
+                                        node_info.ssh_port)
+                check_output(['etcdctl', 'rm',
+                              '/lain/nodes/changing_labels/{}'.format(key)],
+                             stderr=STDOUT)
+
 
 def run_addnode_ansible(args):
     envs = {
@@ -270,6 +327,16 @@ def run_addnode_ansible(args):
     if args.labels:
         envs['node_labels'] = args.labels
     return run_ansible_cmd(args.playbooks, envs, file_name='site.yaml')
+
+
+def run_change_labels_ansible(playbooks_path, change_type, diff_labels):
+    envs = {
+        'target': 'changing_labels_nodes',
+        'role': 'node-change-labels',
+        'change_type': change_type,
+        'diff_labels': diff_labels
+    }
+    return run_ansible_cmd(playbooks_path, envs)
 
 
 def run_cleannode_ansible(playbooks_path):
