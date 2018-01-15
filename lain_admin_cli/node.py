@@ -278,6 +278,9 @@ class Node(TwoLevelCommandBase):
          help='the labels to add, for example: k1=v1 k2=v2')
     @arg('-p', '--playbooks', required=True)
     def change_labels(self, nodes, change_type="", labels=[], playbooks=""):
+        """
+        change labels of nodes, add/delete operations are supported
+        """
         normlized_labels = {}
         for x in labels:
             ys = x.split('=')
