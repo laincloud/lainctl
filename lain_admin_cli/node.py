@@ -297,26 +297,34 @@ class Node(TwoLevelCommandBase):
         diff_labels = ['{}={}'.format(k, v)
                        for k, v in normlized_labels.items()]
 
+        node_infos = {}
         try:
             for node in nodes:
                 node_info = NodeInfo(node)
+                if node_info.ip in node_infos:
+                    error('duplicate node {}:{}'.
+                          format(node_info.name, node_info.ip))
+                    sys.exit(1)
+
+                node_infos[node_info.ip] = node_info
+        except Exception as e:
+            error("Exception: {}.".format(e))
+            sys.exit(1)
+
+        try:
+            for _, node_info in node_infos.items():
                 key = "{}:{}:{}".format(node_info.name, node_info.ip,
                                         node_info.ssh_port)
                 check_output(['etcdctl', 'set',
-                              '/lain/nodes/changing_labels/{}'.format(key),
+                              '/lain/nodes/changing-labels/{}'.format(key),
                               node_info.ip], stderr=STDOUT)
             run_change_labels_ansible(playbooks, change_type, diff_labels)
         except Exception as e:
             error("Exception: {}.".format(e))
             sys.exit(1)
         finally:
-            for node in nodes:
-                node_info = NodeInfo(node)
-                key = "{}:{}:{}".format(node_info.name, node_info.ip,
-                                        node_info.ssh_port)
-                check_output(['etcdctl', 'rm',
-                              '/lain/nodes/changing_labels/{}'.format(key)],
-                             stderr=STDOUT)
+            check_output(['etcdctl', 'rm', '--recursive',
+                          '/lain/nodes/changing-labels'], stderr=STDOUT)
 
 
 def run_addnode_ansible(args):
